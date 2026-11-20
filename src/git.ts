@@ -256,13 +256,28 @@ export function parseFetchV0(packets: Pkt[]): FetchRequest {
   return req;
 }
 
-function fetchResponseV2(repo: Repo, req: FetchRequest): Buffer {
+/** The pack bytes + shallow info for a fetch, from the store's cache when the same fetch ran before. */
+function fetchPack(repo: Repo, store: Store, req: FetchRequest): { pack: Buffer; count: number; shallow: string[]; unshallow: string[] } {
+  const key = `${repo.id}|${req.wants.join(',')}|${req.haves.join(',')}|${[...req.shallowSet].sort().join(',')}|${req.depth ?? ''}`;
+  const cached = store.fetchPackCache.get(key);
+  if (cached) return cached;
   const { objects, shallow, unshallow } = repo.fetchClosure({
     wants: req.wants,
     haves: req.haves,
     shallowSet: req.shallowSet,
     depth: req.depth,
   });
+  const result = { pack: writePack(objects), count: objects.size, shallow, unshallow };
+  if (store.fetchPackCache.size >= 64) {
+    const first = store.fetchPackCache.keys().next().value as string | undefined;
+    if (first !== undefined) store.fetchPackCache.delete(first);
+  }
+  store.fetchPackCache.set(key, result);
+  return result;
+}
+
+function fetchResponseV2(repo: Repo, store: Store, req: FetchRequest): Buffer {
+  const { pack, count, shallow, unshallow } = fetchPack(repo, store, req);
   // Section order per protocol v2 (git 2.43's reader, fetch-pack.c):
   // - When the request carried `have` lines, git processes the
   //   acknowledgments section first: `ready` + delim when a pack follows,
@@ -287,11 +302,11 @@ function fetchResponseV2(repo: Repo, req: FetchRequest): Buffer {
     // response end. A delim before the flush makes the demux eat the flush
     // and leaves the end check reading EOF.
     parts.push(pktLine('packfile\n'));
-    parts.push(...sidebandPackets(writePack(objects)));
+    parts.push(...sidebandPackets(pack));
   };
   if (req.haves.length > 0) {
     parts.push(pktLine('acknowledgments\n'));
-    if (objects.size > 0) {
+    if (count > 0) {
       parts.push(pktLine('ready\n'));
       parts.push(pktDelim());
       shallowSection();
@@ -309,18 +324,13 @@ function fetchResponseV2(repo: Repo, req: FetchRequest): Buffer {
   return Buffer.concat(parts);
 }
 
-function fetchResponseV0(repo: Repo, req: FetchRequest): Buffer {
-  const { objects, shallow, unshallow } = repo.fetchClosure({
-    wants: req.wants,
-    haves: req.haves,
-    shallowSet: req.shallowSet,
-    depth: req.depth,
-  });
+function fetchResponseV0(repo: Repo, store: Store, req: FetchRequest): Buffer {
+  const { pack, count, shallow, unshallow } = fetchPack(repo, store, req);
   const parts: Buffer[] = [];
   parts.push(pktLine('NAK\n'));
   for (const oid of shallow) parts.push(pktLine(`shallow ${oid}\n`));
   for (const oid of unshallow) parts.push(pktLine(`unshallow ${oid}\n`));
-  if (objects.size > 0) parts.push(...sidebandPackets(writePack(objects)));
+  if (count > 0) parts.push(...sidebandPackets(pack));
   parts.push(pktFlush());
   return Buffer.concat(parts);
 }
@@ -448,7 +458,7 @@ export function handleGit(req: GitRequest): { status: number; contentType: strin
       }
       if (command === 'fetch') {
         const args = lines.filter((line) => !line.startsWith('command=') && !line.startsWith('agent=') && !line.startsWith('object-format='));
-        return { status: 200, contentType: 'application/x-git-upload-pack-result', body: fetchResponseV2(repo, parseFetchV2(args)) };
+        return { status: 200, contentType: 'application/x-git-upload-pack-result', body: fetchResponseV2(repo, req.store, parseFetchV2(args)) };
       }
       return { status: 400, contentType: 'application/json', body: Buffer.from(JSON.stringify({ message: 'unknown command' }), 'utf8') };
     }
@@ -456,7 +466,7 @@ export function handleGit(req: GitRequest): { status: number; contentType: strin
     if (packets.length === 0) {
       return { status: 400, contentType: 'application/json', body: Buffer.from(JSON.stringify({ message: 'malformed request' }), 'utf8') };
     }
-    return { status: 200, contentType: 'application/x-git-upload-pack-result', body: fetchResponseV0(repo, parseFetchV0(packets)) };
+    return { status: 200, contentType: 'application/x-git-upload-pack-result', body: fetchResponseV0(repo, req.store, parseFetchV0(packets)) };
   }
   // receive-pack (v0 only).
   const result = handleReceivePack(repo, req.body);

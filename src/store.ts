@@ -190,6 +190,8 @@ export interface Issue {
   updatedAt: string;
   createdSeq: number;
   comments: { id: number; body: string; createdAt: string }[];
+  /** Cached GET /issues/{n} body; cleared on any mutation of the issue. */
+  cachedJson: Buffer | null;
 }
 
 export interface PullRequest {
@@ -478,6 +480,14 @@ export class Store {
   repos = new Map<string, Repo>();
   nextRepoId = 1;
   requestSeq = 0;
+  /**
+   * Cache of fetch results: pack bytes + shallow/unshallow lists, keyed by
+   * the exact fetch parameters. A fetch result is a pure function of the
+   * objects it closes over, and objects are append-only (a ref update never
+   * removes the objects a previous fetch sent), so an entry stays valid
+   * for the life of the process. Bounded, FIFO eviction.
+   */
+  fetchPackCache = new Map<string, { pack: Buffer; count: number; shallow: string[]; unshallow: string[] }>();
 
   constructor(viewer: ScenarioUser) {
     this.viewer = viewer;

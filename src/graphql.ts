@@ -744,6 +744,7 @@ function executeMutation(operation: OperationNode, ctx: ExecContext): { data: Re
         if (issue) {
           issue.state = 'closed';
           issue.updatedAt = store.clock.tick();
+          issue.cachedJson = null;
         }
         const issueSel = field.selection.find((sel) => sel.kind !== 'spread' && sel.kind !== 'inline' && (sel as FieldNode).name === 'issue') as FieldNode | undefined;
         data[key] = {

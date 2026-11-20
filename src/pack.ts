@@ -88,6 +88,23 @@ function applyDelta(base: Buffer, delta: Buffer): Buffer {
 
 /** Inflate the object at `offset` (declared size `size`); return data + next offset. */
 function inflateObject(buf: Buffer, offset: number, size: number, limit: number): { data: Buffer; next: number } {
+  // Fast path: inflateSync ignores trailing bytes, so one inflate of the
+  // remainder decodes just this object's stream. The stream's end is then
+  // found by re-deflating at level 6 (what the kit client and git's
+  // pack-objects use by default) and matching the bytes: zlib is
+  // deterministic, so a match proves the exact end. One inflate + one
+  // deflate replaces ~log2(range) inflates.
+  try {
+    const data = inflateSync(buf.subarray(offset, limit));
+    if (data.length === size) {
+      const re = deflateSync(data, { level: 6 });
+      if (re.length > 0 && buf.subarray(offset, offset + re.length).equals(re)) {
+        return { data, next: offset + re.length };
+      }
+    }
+  } catch {
+    // Fall through to the binary search.
+  }
   // Binary search the smallest end that inflates to exactly `size` bytes.
   let lo = offset + 1;
   let hi = limit;
@@ -100,12 +117,9 @@ function inflateObject(buf: Buffer, offset: number, size: number, limit: number)
         found = mid;
         hi = mid - 1;
       } else {
-        // Inflated but wrong size: the stream ended early (a shorter object
-        // cannot grow by extending), or this slice is still truncated.
-        // A successful inflate means the stream ended at or before mid;
-        // if the size is wrong, the real stream must end later — but a
-        // longer slice can only add trailing garbage, never change the
-        // output. So a wrong-size success means our size is wrong: fail.
+        // A successful inflate with the wrong size means the declared size
+        // is wrong: a longer slice can only add trailing garbage, never
+        // change the output.
         throw new Error('inflated size mismatch');
       }
     } catch (err) {
