@@ -53,3 +53,20 @@ Push/write moved -1 each: run-to-run noise (push rounds within one run span 734-
 Nondeterministic trials: 0. All 120 checks pass on every trial; only perf varies.
 Weakest component: push + write (perf noise dominates; server-side latency is at the
 HTTP floor ~0.35-0.53 ms/req raw, the rest is client + contention).
+
+## v0.2.1 — commit 59be862 (2026-11-20, grade-local trial-0, --driver process, kit level 28)
+
+| column | result |
+|---|---|
+| feature | 600/600 (120/120 checks) |
+| agent (MCP) | 200/200 (15/15 checks) |
+| perf total | 165/200 |
+| perf_p50_us | 330805 |
+| TOTAL | 965/1000 |
+
+Changes vs 5333a8e: LICENSE only — added `SPDX-License-Identifier: MIT`
+(first line). No code changed. This fixes the one `makefun check` failure
+found 2026-11-20 ~06:27 WIB: `license_osi` (LICENSE carried no SPDX line).
+Kit re-downloaded to level 28 before this run (site was at 28, local was 27;
+bundle_sha256 unchanged e20a304d…).
+Score 965 sits inside the v0.2 range (964–972); the license line is not graded.

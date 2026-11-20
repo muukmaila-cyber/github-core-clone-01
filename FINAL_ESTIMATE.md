@@ -1,4 +1,4 @@
-# Final estimate — github-core-clone-01 (forge v0.2, commit 5333a8e)
+# Final estimate — github-core-clone-01 (forge v0.2.1, commit 59be862)
 
 This is a synthetic estimate from independent practice runs, NOT an official
 final score. The final runs three hidden instances drawn after the deadline
@@ -14,14 +14,16 @@ above 0.
 | v0.1 single | 958 | — | — | 958 |
 | v0.2 single | 964 | — | — | 964 |
 | v0.2 3-trial | 972 | 964 | 964 | 966.7 |
+| v0.2.1 single (kit level 28) | 965 | — | — | 965 |
 
 - Feature: 600/600 on every run (120/120 conformance checks).
 - Agent (MCP): 200/200 on every run (15/15 checks).
-- Perf: 158 (v0.1) -> 164-172 (v0.2); per-workload points in the 3-trial run
+- Perf: 158 (v0.1) -> 164-172 (v0.2) -> 165 (v0.2.1, LICENSE-only change,
+  no code changed); per-workload points in the 3-trial run
   are not exported per trial, but the single-trial v0.2 split was
   push 37, clone 37, read 50, write 40.
 
-## Estimate statistics (v0.2, 3 practice trials + 1 single-trial run)
+## Estimate statistics (v0.2 / v0.2.1, 5 practice trials)
 
 - Mean estimated score: ~966
 - Median: 964
@@ -29,12 +31,21 @@ above 0.
 - Maximum: 972
 - Variation: perf p50 varies ~8% run to run (push rounds within one run
   spanned 734-890 ms); feature and agent columns are stable at maximum.
-- Feature reliability: 120/120 on 4/4 runs.
-- MCP reliability: 15/15 on 4/4 runs.
+- Feature reliability: 120/120 on 6/6 runs (incl. v0.1).
+- MCP reliability: 15/15 on 6/6 runs.
 - Determinism status: 0 nondeterministic trials in every run; replay check
   passed (state export matched on replay). The store uses a logical clock
   (no wall clock, no Math.random) and sequential ids, so identical request
   order yields identical state.
+
+## Submission compliance (2026-11-20, kit level 28)
+
+- `makefun check` on v0.2 @ 427930b: 26/27 pass, 1 fail — `license_osi`
+  (LICENSE had no SPDX-License-Identifier line). Fixed in v0.2.1 @ 59be862
+  by adding `SPDX-License-Identifier: MIT` as the first LICENSE line.
+- Bundle `transcripts.tar.gz` rebuilt at 59be862 with 1 usage row attached
+  (build session af92ba53, model ipnext/avocado-5.17-v2); re-check result
+  recorded in the READY FOR REVIEW report, not here.
 
 ## What could still lose points on the hidden instances
 
